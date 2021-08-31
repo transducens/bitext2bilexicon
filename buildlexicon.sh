@@ -1,4 +1,4 @@
-#!__BASH__
+#! /bin/bash_
 
 OUTPUT=/dev/stdout
 
@@ -9,6 +9,7 @@ exit_program()
   echo "   -t tmp-dir            alternative tmp directory (/tmp by default)"
   echo "   SL                    source language code (two characters)"
   echo "   TL                    target language code (two characters)"
+  echo "   MOSESDIR              path to the downloaded moses repository that contains required pre-processing scripts"
   echo "   SL_FILE               file containing the source language segments (can be gzipped)"
   echo "   TL_FILE               file containing the target language segments (can be gzipped)"
   echo "   DIC                   output dictionary"
@@ -43,41 +44,44 @@ do
 done
 
 case $# in
-  5)
-    SL="$1"
-    TL="$2"
-    SL_CORPUS="$3"
-    TL_CORPUS="$4"
-    DIC=$5
-    PREPROCCORPUS=$(mktemp -d $TMPDIR/tempcorpuspreproc.XXXXX)
-    MODELSDIR=$(mktemp -d $TMPDIR/tempgizamodel.XXXXX)
-    ;;
   6)
     SL="$1"
     TL="$2"
-    SL_CORPUS="$3"
-    TL_CORPUS="$4"
-    DIC=$5
-    PREPROCCORPUS=$6
-    if [ ! -d $6 ]; then
-      echo "The path specified for storing the preprocessed files for the corpus is not valid."
-      exit_program $(basename $0)
-    fi
+    MOSESDIR="$3"
+    SL_CORPUS="$4"
+    TL_CORPUS="$5"
+    DIC=$6
+    PREPROCCORPUS=$(mktemp -d $TMPDIR/tempcorpuspreproc.XXXXX)
     MODELSDIR=$(mktemp -d $TMPDIR/tempgizamodel.XXXXX)
     ;;
   7)
     SL="$1"
     TL="$2"
-    SL_CORPUS="$3"
-    TL_CORPUS="$4"
-    DIC=$5
-    PREPROCCORPUS=$6
-    if [ ! -d $6 ]; then
+    MOSESDIR="$3"
+    SL_CORPUS="$4"
+    TL_CORPUS="$5"
+    DIC=$6
+    PREPROCCORPUS=$7
+    if [ ! -d $7 ]; then
       echo "The path specified for storing the preprocessed files for the corpus is not valid."
       exit_program $(basename $0)
     fi
-    MODELSDIR=$7
+    MODELSDIR=$(mktemp -d $TMPDIR/tempgizamodel.XXXXX)
+    ;;
+  8)
+    SL="$1"
+    TL="$2"
+    MOSESDIR="$3"
+    SL_CORPUS="$4"
+    TL_CORPUS="$5"
+    DIC=$6
+    PREPROCCORPUS=$7
     if [ ! -d $7 ]; then
+      echo "The path specified for storing the preprocessed files for the corpus is not valid."
+      exit_program $(basename $0)
+    fi
+    MODELSDIR=$8
+    if [ ! -d $8 ]; then
       echo "The path specified for storing the models produced by GIZA++ is not valid."
       exit_program $(basename $0)
     fi
@@ -99,11 +103,11 @@ if [ "$(file $SL_CORPUS|cut -d ' ' -f 2)" == "gzip" ]; then
 else
     cattool="cat"
 fi
-$cattool $SL_CORPUS | __PYTHON__ -c 'import sys
+$cattool $SL_CORPUS | python3 -c 'import sys
 #from nltk.tokenize.punkt import PunktWordTokenizer
 from nltk import wordpunct_tokenize
 for line in sys.stdin:
-  print " ".join(wordpunct_tokenize(line.decode("utf-8").strip())).encode("utf-8")' | sed "s/&apos;/'/g" | sed 's/&quot;/"/g' | sed 's/&amp;/\&/g' > $SL_TOKENISED &
+  print(" ".join(wordpunct_tokenize(line.strip())))' | sed "s/&apos;/'/g" | sed 's/&quot;/"/g' | sed 's/&amp;/\&/g' > $SL_TOKENISED &
   #print PunktWordTokenizer().tokenize(line.strip())' | sed "s/&apos;/'/g" | sed 's/&quot;/"/g' | sed 's/&amp;/\&/g' > $SL_TOKENISED &
 
 if [ "$(file $TL_CORPUS|cut -d ' ' -f 2)" == "gzip" ]; then
@@ -111,27 +115,27 @@ if [ "$(file $TL_CORPUS|cut -d ' ' -f 2)" == "gzip" ]; then
 else
     cattool="cat"
 fi
-$cattool $TL_CORPUS | __PYTHON__ -c 'import sys
+$cattool $TL_CORPUS | python3 -c 'import sys
 #from nltk.tokenize.punkt import PunktWordTokenizer
 from nltk import wordpunct_tokenize
 for line in sys.stdin:
-  print " ".join(wordpunct_tokenize(line.decode("utf-8").strip())).encode("utf-8")' | sed "s/&apos;/'/g" | sed 's/&quot;/"/g' | sed 's/&amp;/\&/g' > $TL_TOKENISED 
+  print(" ".join(wordpunct_tokenize(line.strip())))' | sed "s/&apos;/'/g" | sed 's/&quot;/"/g' | sed 's/&amp;/\&/g' > $TL_TOKENISED 
   #print PunktWordTokenizer().tokenize(line.strip())' | sed "s/&apos;/'/g" | sed 's/&quot;/"/g' | sed 's/&amp;/\&/g' > $TL_TOKENISED 
 wait
 
 #Lowercasing the corpus
 echo "LOWERCASING THE CORPUS..."
-cat $SL_TOKENISED | perl __PREFIX__/share/bitextor/utils/lowercase.perl > $SL_LOW_TOKENISED 2> /dev/null &
-cat $TL_TOKENISED | perl __PREFIX__/share/bitextor/utils/lowercase.perl > $TL_LOW_TOKENISED 2> /dev/null
+cat $SL_TOKENISED | perl $MOSESDIR/scripts/tokenizer/lowercase.perl > $SL_LOW_TOKENISED 2> /dev/null &
+cat $TL_TOKENISED | perl $MOSESDIR/scripts/tokenizer/lowercase.perl > $TL_LOW_TOKENISED 2> /dev/null
 wait
 
 #Cleaning the corpus
 echo "FILTERING OUT TOO LONG SENTENCES..."
-perl __PREFIX__/share/bitextor/utils/clean-corpus-n.perl $PREPROCCORPUS/corpus.tok.low $SL $TL $PREPROCCORPUS/corpus.clean 1 50 2> /dev/null
+perl $MOSESDIR/scripts/training/clean-corpus-n.perl $PREPROCCORPUS/corpus.tok.low $SL $TL $PREPROCCORPUS/corpus.clean 1 50 2> /dev/null
 
 #Obtaining the vocabulary and the encoded sentences files
 echo "FORMATTING THE CORPUS FOR PROCESSING..."
-__PREFIX__/bin/plain2snt $PREPROCCORPUS/corpus.clean.$SL $PREPROCCORPUS/corpus.clean.$TL 2> /dev/null > /dev/null
+plain2snt $PREPROCCORPUS/corpus.clean.$SL $PREPROCCORPUS/corpus.clean.$TL 2> /dev/null > /dev/null
 mv $PREPROCCORPUS/corpus.clean.${SL}_corpus.clean.$TL.snt $MODELSDIR/$TL-$SL-int-train.snt
 mv $PREPROCCORPUS/corpus.clean.${TL}_corpus.clean.$SL.snt $MODELSDIR/$SL-$TL-int-train.snt
 mv $PREPROCCORPUS/corpus.clean.$SL.vcb $MODELSDIR/$SL.vcb
@@ -165,7 +169,7 @@ wait
 echo -e "${SL}\t${TL}" > $DIC
 
 #Obtaining the harmonic probability of each pair of words in both directions and filtering out those with less than p=0.2; printing the dictionary
-__PYTHON__ -c '
+python3 -c '
 import sys
 
 reload(sys)
@@ -176,18 +180,18 @@ tvocabulary={}
 svcb=open(sys.argv[1],"r")
 tvcb=open(sys.argv[2],"r")
 for line in svcb:
-  item=line.decode("utf-8").strip().split(" ")
+  item=line.strip().split(" ")
   svocabulary[item[0]]=item[1]
 
 for line in tvcb:
-  item=line.decode("utf-8").strip().split(" ")
+  item=line.strip().split(" ")
   tvocabulary[item[0]]=item[1]
 
 t3dic={}
 t3s=open(sys.argv[3],"r")
 t3t=open(sys.argv[4],"r")
 for line in t3t:
-  item=line.decode("utf-8").strip().split(" ")
+  item=line.strip().split(" ")
   if item[1] in t3dic:
     t3dic[item[1]][item[0]]=item[2]
   else:
@@ -195,7 +199,7 @@ for line in t3t:
     t3dic[item[1]][item[0]]=item[2]
 
 for line in t3s:
-  item=line.decode("utf-8").strip().split(" ")
+  item=line.strip().split(" ")
   if item[0] in t3dic:
     if item[1] in t3dic[item[0]]:
       value1=float(t3dic[item[0]][item[1]])
@@ -205,7 +209,7 @@ for line in t3s:
         if item[1] in svocabulary and item[0] in tvocabulary:
           word1=svocabulary[item[1]]
           word2=tvocabulary[item[0]]
-          print "{0}\t{1}".format(word1, word2)' $MODELSDIR/$SL.filtered.vcb $MODELSDIR/$TL.filtered.vcb $MODELSDIR/$SL-$TL.t3.final $MODELSDIR/$TL-$SL.t3.final | egrep '^.\s.$' -v | egrep '^[[:alpha:]-]+\s[[:alpha:]-]+$' >> $DIC
+          print("{0}\t{1}".format(word1, word2))' $MODELSDIR/$SL.filtered.vcb $MODELSDIR/$TL.filtered.vcb $MODELSDIR/$SL-$TL.t3.final $MODELSDIR/$TL-$SL.t3.final | egrep '^.\s.$' -v | egrep '^[[:alpha:]-]+\s[[:alpha:]-]+$' >> $DIC
 
 echo "DONE!"
 
