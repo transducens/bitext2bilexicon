@@ -172,9 +172,6 @@ echo -e "${SL}\t${TL}" > $DIC
 python3 -c '
 import sys
 
-reload(sys)
-sys.setdefaultencoding("UTF-8")
-
 svocabulary={}
 tvocabulary={}
 svcb=open(sys.argv[1],"r")
